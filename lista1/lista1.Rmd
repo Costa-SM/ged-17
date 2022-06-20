@@ -1,0 +1,735 @@
+---
+title: "Lista 1 -- GED-17"
+author: "Arthur Stevenson"
+date: '2022-06-07'
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+#dev.off(dev.list()["RStudioGD"])
+rm(list=ls())
+cat("\f")
+
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(ggplot2)
+library(forecast)
+library(lubridate)
+library(gridExtra)
+library(readxl)
+library(knitr)
+library(stats)
+```
+
+---
+
+## Questão 1  -- Alisamento Exponencial Simples
+
+Inicialmente, tomam-se os dados referentes a produção de veículos no Brasil, fornecidos pelo site G1, e é criada uma série temporal utilizando-os. O gráfico dessa série temporal é gerado a seguir.
+
+
+```{r questao1a, out.width = "80%", fig.align = "center", echo = FALSE}
+veiculos <- c(1684715, 2124177, 2357172, 2403680, 2825224, 3050629, 3076000, 3382135, 3417782, 3404384, 3713813, 3151831, 2428089, 2176784, 2737256, 2881018, 2944988, 2014055)
+
+veiculos.ts <- ts(veiculos, start = 2003, end = 2020, frequency = 1)
+
+
+autoplot(veiculos.ts, lwd = 1) +  
+  xlab('Ano') + 
+  ylab('Veículos Produzidos') + 
+  ggtitle('Produção de Veículos no Brasil')
+```
+
+A seguir, tem-se a previsão, com base nos valores de 2003 a 2019, da quantidade de veículos produzidos no Brasil para os anos de 2020 a 2025.
+
+```{r questao1c, out.width = "80%", fig.align = "center", echo = FALSE}
+veiculos.trim <- veiculos[1:length(veiculos) - 1]
+veiculos.trim.ts <- ts(veiculos.trim, start = 2003, end = 2019)
+veiculos.trim.projetada <- ses(veiculos.trim.ts, initial = 'optimal', h = 6)
+autoplot(veiculos.trim.projetada) +
+  ggtitle('Previsão Usando Simple Exponential Smoothing', subtitle = 'Previsão de 2020 a 2025') + 
+  autolayer(fitted(veiculos.trim.projetada), series = 'Método SES') +
+  autolayer(veiculos.ts, series = 'Série Original') +
+  xlab('Ano') +
+  ylab('Veículos Produzidos')+
+  guides(colour = guide_legend(title="Previsão"))
+  
+
+```
+
+Em seguida, tem-se as previsões para os anos de 2021 a 2025, com base nos dados obtidos de 2003 a 2020.
+
+```{r questao1f, out.width = "80%", fig.align = "center", echo = FALSE}
+veiculos.projetada <- ses(veiculos.ts, h = 5, initial = 'optimal')
+autoplot(veiculos.projetada) +
+  ggtitle('Previsão Usando Simple Exponential Smoothing', subtitle = 'Previsão de 2021 a 2025') + 
+  autolayer(fitted(veiculos.projetada), series = 'Método SES') +
+  autolayer(veiculos.ts, series = 'Série Original') +
+  xlab('Ano') +
+  ylab('Veículos Produzidos') +
+  guides(colour = guide_legend(title="Previsão"))
+
+```
+
+Comparando-se as duas previsões geradas, nota-se que a segunda tem valores significativamente menores que a primeira. Isso se deve ao número de veículos produzidos no ano de 2020, que foi significativamente menor que em 2019. Analisando-se o contexto global, bem como o artigo fornecido, constata-se que, devido ao fechamento das fábricas da multinacional Ford, houve uma redução significativa na quantidade máxima de veículos que poderiam ser produzidos no país. Isto, associado à pandemia de COVID-19, que paralisou diversos setores da economia, resultou em um número significativamente menor de veículos produzidos no ano de 2020, frente ao anterior.
+
+Devido também a esses dois fatores, o número real de veículos produzidos no ano de 2020 tornou-se significativamente diferente do previsto, e acabou por ser um valor fora até mesmo do intervalo de confiança de 85%.
+
+Como no método de alisamento exponencial os valores mais recentes da série têm uma influência maior na previsão, naturalmente, espera-se que a série que contém os dados referentes ao ano de 2020 tenha previsões numericamente menores que a que vai até 2019.
+
+---
+
+## Questão 2 -- Método de Holt
+Primeiramente, tomam-se os dados referentes ao ativo RADL3, de 19 de Abril até 20 de Maio de 2022, e constrói-se uma série temporal com eles.
+
+
+```{r questao2a, out.width = "80%", fig.align = "center", echo = FALSE}
+radl3 <- c(22.50, 22.45, 22.50, 22.92, 22.35, 22.15, 22.02, 20.93, 20.43, 20.12, 20.24, 19.35, 19.02, 18.93, 18.97, 18.46, 18.80, 18.44, 18.19, 18.54, 18.27, 18.35, 18.30)
+
+dias <- seq(as.Date("2022-04-19"), as.Date("2022-05-20"), "day")
+
+radl3.ts <- ts(radl3, frequency = 365, start = c(2022, as.numeric(format(dias[1], "%j"))))
+
+autoplot(radl3.ts) +
+  xlab('Dia') +
+  ylab('Preço de Fechamento') +
+  ggtitle('Preço de Fechamento do Ativo RADL3', subtitle = 'De 19 de Abril a 20 de Maio de 2022')
+
+```
+Em seguida, utilizando o método de Holt, faz-se uma previsão do valor do ativo para os próximos 5 dias.
+
+```{R  questao2c, out.width = "80%", fig.align = "center", echo = FALSE}
+radl3.ts.projetada <- holt(radl3.ts, h = 5, initial = 'optimal', level = c(80, 95))
+
+autoplot(radl3.ts.projetada) +
+  autolayer(fitted(radl3.ts.projetada), series = 'Método de Holt') +
+  autolayer(radl3.ts, series = "Série Original") + 
+  ggtitle('Previsão Usando Método de Holt', subtitle = 'Previsão do Preço de Fechamento do Ativo RADL3') + 
+  xlab('Dia') +
+  ylab('Preço de Fechamento') +
+  guides(colour = guide_legend(title="Previsão"))
+```
+
+---
+
+## Questão 3 -- Método de Holt-Winters
+Inicialmente, tomam-se os valores 
+
+```{R  questao3a, out.width = "80%", fig.align = "center", echo = FALSE}
+cenoura <- c(48.51,50.00,49.50,51.45,66.20,59.15,48.05,31.94,26.65,24.11,23.32,23.57,37.93,51.44,68.50,60.59,44.56,31.29,26.33,36.56,39.08,31.40,42.35,41.39,34.33,43.58,29.04,30.53,26.50,23.75,42.93,39.33,39.33,41.04,39.00,37.13, 67.08,126.88,144.38,100.00) 
+
+cenoura.ts <- ts(cenoura, frequency = 12, start = c(2019, 1), end = c(2022, 4))
+
+cenoura.graph <- autoplot(cenoura.ts) +
+                  ggtitle('Preço da Cenoura', subtitle = 'De Janeiro de 2019 até Abril de 2022') + 
+                  xlab('Ano') +
+                  ylab('R$ a cada 20Kg')
+
+mandioca <- c(584.495,603.725,531.92,514.19,458.095,378.254,430.455,437.5,431.515,448.5775,397.82,342.8775,347.9633,373.325,343.932,291.395,302.186, 286.025,308.0425,307.114,288.9875,300.035,366.7,460.7375,424.276,355.615,369.06,342.44,306.0825,314.65,328.544,322.4175,340.9425, 534.842,472.385,462.595,449.7675,448.345,421.765,441.544,470.0475,460.1825,434.452,495.03,545.75,581.012,676.13,719.7,732.645,746.255, 774.4075,802.212,826.255)
+
+mandioca.ts <- ts(mandioca, frequency = 12, start = c(2018, 1), end = c(2022, 5))
+mandioca.graph <- autoplot(mandioca.ts) +
+                  ggtitle('Preço da Mandioca', subtitle = 'De Janeiro de 2018 até Maio de 2022') + 
+                  xlab('Ano') +
+                  ylab('R$ por Tonelada')
+
+grid.arrange(cenoura.graph, mandioca.graph, nrow = 2)
+```
+
+
+Assim, pode ser realizada a previsão dos preços de cada um dos produtos através do uso do Método de Holt-Winters. Entretanto, antes que a previsão seja realizada, é necessário escolher o modelo a ser utilizado, o aditivo ou multiplicativo. Dessa forma, será realizada primeiro a análise da cenoura.
+
+```{R questao3c, out.width = "80%", fig.align = "center", echo = FALSE}
+cenoura.ts.ad <- hw(cenoura.ts, h = 5, seasonal = "additive")
+cenoura.ts.ad$model
+```
+
+```{R questao3d, out.width = "80%", fig.align = "center", echo = FALSE}
+cenoura.ts.mu <- hw(cenoura.ts, h = 5, seasonal = "multiplicative")
+cenoura.ts.mu$model
+```
+
+Portanto, como temos um Critério de Informação de Akaike menor para o modelo multiplicativo, optamos por ele para realizar as previsões dos preços da cenoura. Assim, pode ser gerado o gráfico que contém as previsões, e a série original.
+
+
+```{R questao3e, out.width = "80%", fig.align = "center", echo = FALSE}
+autoplot(cenoura.ts.mu) +
+  autolayer(fitted(cenoura.ts.mu), series = "Holt-Winters Multiplicativo") +
+  autolayer(cenoura.ts, series = "Série Original") +
+  ggtitle('Previsão do Preço da Cenoura com Holt-Winters Multiplicativo',
+          subtitle = 'De Janeiro de 2019 até Abril de 2022') + 
+  xlab('Ano') +
+  ylab('R$ a cada 20Kg') +
+  guides(colour = guide_legend(title="Previsão"))
+```
+
+Feita a previsão da cenoura, pode ser realizado um processo análogo para a mandioca.
+
+```{R questao3f, out.width = "80%", fig.align = "center", echo = FALSE}
+mandioca.ts.ad <- hw(mandioca.ts, h = 5, seasonal = "additive")
+mandioca.ts.ad$model
+```
+
+```{R questao3g, out.width = "80%", fig.align = "center", echo = FALSE}
+mandioca.ts.mu <- hw(mandioca.ts, h = 5, seasonal = "multiplicative")
+mandioca.ts.mu$model
+```
+
+Da mesma forma que antes, como o modelo aditivo possui um Critério de Informação de Akaike menor, ele é utilizado para realizar a previsão dos preços.
+
+```{R questao3h, out.width = "80%", fig.align = "center", echo = FALSE}
+autoplot(mandioca.ts.ad) +
+  autolayer(fitted(mandioca.ts.ad), series = "Holt-Winters Aditivo") +
+  autolayer(mandioca.ts, series = "Série Original") +
+  ggtitle('Previsão do Preço da Mandioca com Holt-Winters Aditivo',
+          subtitle = 'De Janeiro de 2019 até Abril de 2022') + 
+  xlab('Ano') +
+  ylab('R$ a cada Tonelada') +
+  guides(colour = guide_legend(title="Previsão"))
+```
+
+---
+
+## Questão 4 -- Componentes da Série Temporal
+Utilizando o software R, podem ser gerados os gráficos para as três séries temporais fornecidas, da movimentação de passageiros por vias aéreas, ferroviárias, e por automóveis, respectivamente.
+
+```{R questao4a, out.width = "80%", fig.align = "center", echo = FALSE}
+Sept11Travel <- read_excel("Sept11Travel.xls")
+
+air.antes <- ts(Sept11Travel$`Air RPM (000s)`, frequency = 12, start = c(1990, 01), end = c(2001, 08))
+fer.antes <- ts(Sept11Travel$`Rail PM`, frequency = 12, start = c(1990, 01), end = c(2001, 08))
+aut.antes <- ts(Sept11Travel$`VMT (billions)`, frequency = 12, start = c(1990, 01), end = c(2001, 08))
+  
+autoplot(air.antes) + 
+  ggtitle('Movimentação de Passageiros por Vias Aéreas',
+          subtitle = 'De Janeiro de 1990 até Outubro de 2001') +
+  xlab('Ano') +
+  ylab('Passageiros-Milhas Aéreas')
+
+autoplot(fer.antes) + 
+  ggtitle('Movimentação de Passageiros por Ferrovias',
+          subtitle = 'De Janeiro de 1990 até Outubro de 2001') +
+  xlab('Ano') +
+  ylab('Passageiros-Milhas Ferroviárias')
+
+autoplot(aut.antes) + 
+  ggtitle('Movimentação de Passageiros por Automóveis',
+          subtitle = 'De Janeiro de 1990 até Outubro de 2001') +
+  xlab('Ano') +
+  ylab('Milhas Percorridas')
+```
+
+Analisando-se o gráfico referente à movimentação de passageiros por vias aéreas, isto é, o gráfico (a), nota-se uma clara tendência linear de crescimento, e um caráter repetitivo de crescimento, com um pico próximo da metade do ano. Como esse comportamento se repete a cada ano, considera-se que é um caráter sazonal, e não cíclico. Por fim, nota-se também um caráter aleatório nos valores do gráfico, dado que ele não é perfeitamente regular.
+
+Portanto, o gráfico referente à serie temporal aérea possui as componentes de tendência, sazonalidade, e aleatória. Realizando uma análise análoga para os demais, constata-se que o de automóveis possui as mesmas características do primeiro, e, portanto, possui componentes de tendência, sazonalidade, e aleatória. Antes de determinar as características da série temporal ferroviária, serão gerados novos gráficos.
+
+Assim, para realizar uma análise da tendência das séries, sem que haja tanta interferência da sazonalidade, pode-se utilizar um alisamento exponencial de Holt, com um pequeno valor de $\alpha$, nos dados obtidos. Assim, obtém-se os gráficos abaixo.
+
+Por fim, analisando o gráfico da série temporal ferroviária, nota-se que, além do caráter aleatório e sazonal, a série temporal aparenta também ter um caráter cíclico, dado que a sua linha de tendência, indicada pelo alisamento realizado com o método de Holt, primeiro decresce e, em seguida, passa a crescer, de maneira similar a uma função seno.
+
+```{R questao4c, out.width = "80%", fig.align = "center", echo = FALSE}
+air.antes.holt <- holt(air.antes, alpha = 0.05)
+
+autoplot(air.antes) + 
+  autolayer(air.antes, series = "Original") + 
+  autolayer(fitted(air.antes.holt), series = "Holt") + 
+  ggtitle('Movimentação de Passageiros por Vias Aéreas',
+          subtitle = 'De Janeiro de 1990 até Outubro de 2001') +
+  xlab('Ano') +
+  ylab('Passageiros-Milhas Aéreas')
+
+fer.antes.holt <- holt(fer.antes, alpha = 0.05)
+autoplot(fer.antes) + 
+  autolayer(fer.antes, series = "Original") + 
+  autolayer(fitted(fer.antes.holt), series = "Holt") + 
+  ggtitle('Movimentação de Passageiros por Ferrovias',
+          subtitle = 'De Janeiro de 1990 até Outubro de 2001') +
+  xlab('Ano') +
+  ylab('Passageiros-Milhas Ferroviárias')
+
+
+aut.antes.holt <- holt(aut.antes, alpha = 0.05)
+autoplot(aut.antes) + 
+  autolayer(aut.antes, series = "Original") + 
+  autolayer(fitted(aut.antes.holt), series = "Holt") + 
+  ggtitle('Movimentação de Passageiros por Automóveis',
+          subtitle = 'De Janeiro de 1990 até Outubro de 2001') +
+  xlab('Ano') +
+  ylab('Milhas Percorridas')
+
+
+```
+
+---
+
+## Questão 5 -- Alisamento Exponencial Simples
+
+Inicialmente, para gerar um gráfico idêntico ao que foi mostrado no enunciado da questão, o conjunto de dados não pode ser plotado por inteiro, visto que a imagem original não contém todos os 100 pontos que são fornecidos. Assim, limitando a quantidade de pontos que são utilizados, pode-se obter a imagem análoga criada com o auxílio do R.
+
+```{R questao5a, out.width = "80%", fig.align = "center", echo = FALSE}
+velocidade <- c(47.12,45.01,44.69,45.41,45.45,44.77,45.24,45.27,46.93,47.97,
+                45.27,45.10,43.31,44.97,45.31,45.23,42.92,44.99,45.12,46.67,
+                44.62,45.11,45.18,45.91,48.39,46.74,46.62,45.31,44.69,46.39,
+                43.79,44.28,46.04,46.45,46.31,45.65,46.28,44.11,46.00,46.70,
+                47.84,48.24,45.59,46.56,45.02,43.67,44.53,44.37,44.62,46.71,
+                45.71,43.84,45.09,44.16,46.21,45.11,46.16,46.50,44.88,45.68,
+                44.40,44.17,45.18,43.73,45.14,47.98,46.52,46.89,46.01,44.98,
+                45.76,45.38,45.33,44.07,44.02,45.69,44.59,43.45,44.75,45.46,
+                43.73,44.15,44.05,44.83,43.93,44.40,45.25,44.80,44.75,44.50,
+                45.12,45.28,45.15,46.24,46.15,46.57,45.51,46.98,46.64,44.31)
+
+plot(velocidade[1:78], type = "o", 
+     xlab = "Semana", ylab = "Velocidade", 
+     ylim = c(43, 49),
+     main = "Velocidade Média Semanal")
+```
+
+Em seguida, pode-se aplicar o Alisamento Exponencial Simples, com diferentes valores de alfa, no conjunto de dados. Nesse caso, serão considerados todos os valores de velocidade fornecidos. Assim, pode-se calular o valor do SSE para os diferentes valores de $\alpha$, e utilizar o próprio software R para buscar o melhor valor de $\alpha$, de acordo com a minimização do Critério de Informação de Akaike.
+
+```{R questao5b, out.width = "80%", fig.align = "center", echo = FALSE}
+velocidade.ts <- ts(velocidade)
+
+velocidade.prev01 <- ses(velocidade.ts, alpha = 0.1, initial = "simple")
+velocidade.prev02 <- ses(velocidade.ts, alpha = 0.2, initial = "simple")
+velocidade.prev03 <- ses(velocidade.ts, alpha = 0.3, initial = "simple")
+velocidade.prev04 <- ses(velocidade.ts, alpha = 0.4, initial = "simple")
+velocidade.prev05 <- ses(velocidade.ts, alpha = 0.5, initial = "simple")
+velocidade.prev09 <- ses(velocidade.ts, alpha = 0.9, initial = "simple")
+
+velocidade.prev.optimal <- ses(velocidade.ts, initial = "optimal", h = 11)
+
+velocidade.results <- cbind(c(0.1, 0.2, 0.3, 0.4, 0.5, 0.9, 0.2294),
+                            c(velocidade.prev01$model$SSE,
+                              velocidade.prev02$model$SSE,
+                              velocidade.prev03$model$SSE,
+                              velocidade.prev04$model$SSE,
+                              velocidade.prev05$model$SSE,
+                              velocidade.prev09$model$SSE,
+                              "Valor Encontrado pela Função SES"))
+
+kable(velocidade.results, align = "c", col.names = c("Valor de Alfa", "SSE"))
+```
+
+Nota-se, então, que o valor de $\alpha$ encontrado através da minimização do Critério de Informação de Akaike é significativamente menor que o encontrado por Montgomery. Isso significa que os valores mais recentes têm menos influência nos valores encontrados no ajuste.
+
+Com o trecho da série utilizada pelo autor do livro, pode-se reconstruir a figura que contém a previsão dos valores de velocidade subsequentes através da técnica de Alisamento Exponencial Simples.
+
+```{R questao5d, out.width = "80%", fig.align = "center", echo = FALSE}
+velocidade.ts <- ts(velocidade[1:78])
+velocidade.prev04 <- ses(velocidade.ts, alpha = 0.4, initial = "simple")
+
+velocidade.real <- ts(velocidade[79:90], start = 79, end = 90, frequency = 1)
+
+autoplot(velocidade.prev04) + 
+  autolayer(velocidade.ts, series = "Speed") +
+  autolayer(fitted(velocidade.prev04), series = "Smoothed") + 
+  autolayer(velocidade.real, series = "Actual") +
+  guides(colour = guide_legend(title="Variable")) + 
+  xlab("Week") + 
+  ylab("Speed") + 
+  ggtitle("Previsões para os dados de velocidade média semanal", subtitle = "Para as semanas 79-90")
+```
+
+
+
+---
+
+## Questão 6
+
+Com base na descrição do método de Simple Exponential Smoothing, pode-se replicá-lo utilizando os comandos fornecidos no R e, em seguida, gerar os gráficos que foram apresentados durante o enunciado da questão.
+
+```{R questao6a, out.width = "80%", fig.align = "center", echo = FALSE}
+galoes <- c(106, 110, 108, 97, 210, 136, 128, 134, 107, 123, 139, 140, 144, 94, 108, 168, 179, 120)
+
+galoes.ses1 <- c(galoes[1])
+galoes.ses2 <- c(sum(galoes[1:6]) / 6)
+alpha <- 0.1
+
+for(i in 2:length(galoes)){
+  galoes.ses1[i] <- alpha * galoes[i] + (1 - alpha) * galoes.ses1[i - 1]
+  galoes.ses2[i] <- alpha * galoes[i] + (1 - alpha) * galoes.ses2[i - 1]
+}
+
+plot(galoes, type = "o", col = "blue", ylab = "Gallons", 
+  xlab = "Week Number", main = "Exponential Smoothing -- Method A")
+  lines(galoes.ses1, col = "red")
+  points(galoes.ses1, col = "red")
+
+plot(galoes, type = "o", col = "blue", ylab = "Gallons", 
+  xlab = "Week Number", main = "Exponential Smoothing -- Method B")
+  lines(galoes.ses2, col = "red")
+  points(galoes.ses2, col = "red") 
+```
+Ademais, podem ser realizadas as previsões para a semana 19 de ambos os métodos.
+
+```{R questao6b, out.width = "80%", fig.align = "center", echo = FALSE}
+print(c("Previsão do Primeiro Método", alpha * galoes[length(galoes)] + (1 - alpha) * galoes.ses1[length(galoes)]))
+print(c("Previsão do Segundo Método", alpha * galoes[length(galoes)] + (1 - alpha) * galoes.ses2[length(galoes)]))
+```
+Em seguida, a implementação de SES presente no pacote Forecast do R pode ser utilizada para realizar a previsão, com dois valores diferentes da alfa, o utilizado pela empresa, e o considerado ótimo, através da minimização do Critério de Informação de Akaike.
+```{R questao6c, out.width = "80%", fig.align = "center", echo = FALSE}
+galoes.ts <- ts(galoes)
+
+galoes.ts.prevfix <- ses(galoes.ts, alpha = 0.1, initial = "simple", h = 1)
+galoes.ts.prevopt <- ses(galoes.ts, initial = "optimal")
+
+print("Modelo com alpha = 0.1")
+galoes.ts.prevfix$fitted
+
+print("Modelo Ótimo")
+galoes.ts.prevopt$fitted
+
+```
+
+Portanto, comparando-se os dados obtidos com a tabela fornecida, nota-se que o ajuste automático de $\alpha$ realizado pelo R estabeleceu uma quantidade de galões praticamente constante, enquanto o método com $\alpha = 0.1$ tem valores iguais aos da coluna referente ao método A.^
+
+---
+
+## Questão 7
+Inicialmente, será utilizada a Ponderação Exponencial Simples, com diferentes valores de alfa, para realizar o alisamento da série temporal referente às vendas. Para o mês de janeiro do ano seguinte, tem-se as previsões com os diferentes valores a seguir.
+
+```{R questao7a, out.width = "80%", fig.align = "center", echo = FALSE}
+vendas <- c(6.05, 5.99, 5.62, 5.59, 5.80, 6.45, 5.72, 5.92, 6.35, 5.94, 6.20, 6.29)
+vendas.ts <- ts(vendas)
+```
+
+Ponderação Exponencial Simples usando Alpha = 0.1
+
+```{R, out.width = "80%", fig.align = "center", echo = FALSE}
+vendas.prev.1 <- ses(vendas.ts, alpha = 0.1, initial = "simple", h = 1)
+vendas.prev.1
+```
+
+Ponderação Exponencial Simples usando Alpha = 0.5
+
+```{R, out.width = "80%", fig.align = "center",  echo = FALSE}
+vendas.prev.5 <- ses(vendas.ts, alpha = 0.5, initial = "simple", h = 1)
+vendas.prev.5
+```
+
+Ponderação Exponencial Simples usando Alpha = 0.9
+
+```{R, out.width = "80%", fig.align = "center",  echo = FALSE}
+vendas.prev.9 <- ses(vendas.ts, alpha = 0.9, initial = "simple", h = 1)
+vendas.prev.9
+```
+
+Assim, com as três séries ajustadas utilizando a ponderação exponencial simples, pode-se preencher a tabela apresentada, e gerar o gráfico para compará-las. Para o último, a série original está apresentada em preto.
+
+```{R, out.width = "80%", fig.align = "center", echo = FALSE}
+vendas.table <- cbind(c("Jan", "Fev", "Mar", "Abr", "Mai", "Jun", 
+                        "Jul", "Ago", "Set", "Out", "Nov", "Dez", "Jan"),
+                      c(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13),
+                      c(6.05, 5.99, 5.62, 5.59, 5.80, 6.45, 5.72, 5.92, 6.35, 5.94, 6.20, 6.29, "--"),
+                      round(c(fitted(vendas.prev.1), vendas.prev.1$fitted[1]), 2),
+                      round(c(fitted(vendas.prev.5), vendas.prev.5$fitted[1]), 2),
+                      round(c(fitted(vendas.prev.9), vendas.prev.9$fitted[1]), 2))
+
+
+
+
+kable(vendas.table, align = "c", col.names = c("Mês", "T", "Vendas", "alfa = 0.1", "alfa = 0.5", "alfa = 0.9"))
+
+
+autoplot(vendas.ts) +
+  autolayer(fitted(vendas.prev.1), series = "Alpha 0.1") +
+  autolayer(fitted(vendas.prev.5), series = "Alpha 0.5") +
+  autolayer(fitted(vendas.prev.9), series = "Alpha 0.9") + 
+  guides(colour = guide_legend(title="Série")) + 
+  ylab("Vendas") + 
+  xlab("Mês") 
+```
+
+Em seguida, pode ser utilizado o Método de Holt para realizar o alisamento da série temporal. Primeiramente, o valor de janeiro do ano inicial ajustado por Holt, com coeficientes Alpha = 0.2 e Beta = 0.5, é dado por:
+
+```{R, out.width = "80%", fig.align = "center", echo = FALSE}
+vendas.prev.holt <- holt(vendas.ts, alpha = 0.2, beta = 0.5, h = 1, initial = "simple")
+vendas.prev.holt$fitted[1]
+```
+
+Assim, em posse destes ajustes e previsões, podem ser calculados alguns dos critérios de avaliação das séries temporais criadas. Isto é feito utilizando-se o comando `accuracy()` do R. Para a obtenção do MSE, basta tomar $\text{RMSE}^2$, isto é, elevar o valor de RMSE ao quadrado.
+
+```{R, out.width = "80%", fig.align = "center", echo = FALSE}
+accuracy(vendas.prev.1)
+accuracy(vendas.prev.5)
+accuracy(vendas.prev.9)
+accuracy(vendas.prev.holt)
+
+```
+
+A seguir, pode ser realizada a previsão do valor de vendas para Janeiro do ano seguinte com o método anterior. Com esse valor, pode ser construído um gráfico contendo a série original, a série com o alisamento usando o Método de Holt, e a previsão realizada.
+
+```{R, out.width = "80%", fig.align = "center", echo = FALSE}
+vendas.prev.holt
+
+autoplot(vendas.prev.holt) +
+  autolayer(fitted(vendas.prev.holt), series = "Holt") +
+  autolayer(vendas.ts, series = "Original") +
+  guides(colour = guide_legend(title="Série")) + 
+  ylab("Vendas") + 
+  xlab("Mês") 
+
+```
+Após essa análise inicial, pode ser utilizada a própria função Holt, presente na biblioteca Forecast do R, para determinar os valores ótimos de $\alpha$ e $\beta$, considerando a minimização do Critério de Informação de Akaike.
+
+```{R, out.width = "80%", fig.align = "center", echo = FALSE}
+vendas.prev.optimal <- holt(vendas.ts, initial = "optimal", h = 1)
+vendas.prev.optimal$model
+```
+Analisando a solução do aluno de MBA, constata-se que, para a ponderação exponencial simples, foram trocadas as posições de $\hat{y}_{t-1}$ e $y_t$, o que prejudicou o alisamento realizado, e teve um efeito cascata, que tornou a sua solução inválida.
+
+---
+
+## Questão 8
+Inicialmente, tomando o código fornecido, bem como os dados da Amtrak, pode-se reproduzir a figura apresentada.
+
+
+```{R out.width = "80%", fig.align = "center", echo = FALSE}
+amtrak.data <- read.csv("Amtrak_Data.csv")
+passageiros.ts <- ts(amtrak.data$Passageiros, start = c(1991, 1), end = c(2004, 3), frequency = 12)
+plot(passageiros.ts, xlab = "Tempo", ylab = "Passageiros", ylim = c(1300, 2300), bty = "l")
+
+nvalid <- 36
+ntrain <- length(passageiros.ts) - nvalid
+
+train.ts <- window(passageiros.ts, start = c(1991, 1), end = c(1991, ntrain))
+valid.ts <- window(passageiros.ts, start = c(1991, ntrain + 1), end = c(1991, ntrain + nvalid))
+
+passageiros.lm <- tslm(train.ts ~ trend + I(trend^2))
+passageiros.lm.pred <- forecast(passageiros.lm, h = nvalid, level = 0)
+
+plot(passageiros.lm.pred, ylim = c(1300, 2600), ylab = "Passageiros",
+     xlab = "Tempo", bty = "l", xaxt = "n", xlim = c(1991, 2006.25), main = "", flty = 2)
+
+axis(1, at = seq(1991, 2006, 1), labels = format(seq(1991, 2006, 1)))
+lines(passageiros.lm$fitted, lwd = 2)
+lines(valid.ts)
+```
+Assim, podem ser analisados os vetores especificados nas questões. Primeiramente, o vetor `passageiros.lm.pred$residuals` corresponde aos resíduos da série temporal ajustada com a função `forecast()`, que são a diferença entre os valores da série temporal ajustada e a original.
+
+Em seguida, `valid.ts - passageiros.lm.pred$mean` é, novamente, um vetor que contém a diferença entre os valores da série original e os valores da série temporal que foi criada com a função `forecast()`. Nesse caso, entretanto, os valores são referentes não ao intervalo de tempo que foi ajustado, como no caso anterior, mas ao intervalo de tempo correspondente à previsão.
+
+Portanto, o primeiro comando fornece as diferenças no intervalo de treinamento, e o segundo, no de validação. A média e desvio padrão do vetor que concatena os dois vetores anteriores é dada abaixo.
+
+```{R out.width = "80%", fig.align = "center", echo = FALSE}
+erro <- c(passageiros.lm.pred$residuals, valid.ts - passageiros.lm.pred$mean)
+print(c("Média do Vetor de Erro:",  mean(erro)))
+print(c("Desvio-Padrão do Vetor de Erro:", sd(erro)))
+```
+
+Por fim, pode ser realizado um teste de normalidade no vetor de erro, bem como a confecção do seu gráfico. Ambos estão abaixo. O teste escolhido foi o de Kolmogorov-Smirnov. Observando-se o p-valor encontrado, nota-se que ele é superior a 5\% ($p_{val} = 0.1709$), de forma que a hipótese de que os valores do erro seguem uma distribuição normal não pode ser excluída. Assim, conclui-se que a previsão realizada possui uma boa precisão, dado que os seus valores são próximos do que normalmente se esperaria (como o erro aparenta ter uma distribuição normal, todos os valores do vetor são próximos do que se encontraria na natureza). 
+
+```{R out.width = "80%", fig.align = "center", echo = FALSE}
+erro.ts <- ts(erro, start = c(1991, 1), end = c(2004, 3), frequency = 12)
+plot(erro.ts, xlab = "Tempo", ylab = "Erro", bty = "l", col = "red", main = "Valores do Erro")
+
+z.erro <- scale(erro)
+ks.test(z.erro, "pnorm", 0, 1)
+
+```
+
+---
+
+## Questão 9
+
+Utilizando o R, é possível tomar os dados fornecidos, e realizar um ajuste usando o método de Holt-Winters para os valores. Assim, utilizando o comando `hw()`, e os valores de $\alpha$, $\beta$ e $\gamma$ especificados na figura, pode ser obtido o gráfico abaixo, que contém a série original, a ajustada por Holt-Winters, e a previsão para os próximos 4 trimestres.
+
+```{R, out.width = "80%", fig.align = "center", echo = FALSE}
+ganhos <- c(0.3, 0.46, 0.345, 0.91, 0.33, 0.545, 0.44, 1.04, 0.495, 0.68, 0.545, 1.285, 0.55, 0.87, 0.66, 1.58, 0.59, 0.99, 0.83, 1.73, 0.61, 1.05, 0.92, 2.04, 0.7, 1.23, 1.06, 2.32, 0.82, 1.41, 1.25, 2.73)
+
+ganhos.ts <- ts(ganhos, frequency = 4)
+
+# Holt-Winters com alpha = 0.5, gamma = 0.5, delta = 0.7
+# alpha -> level
+# gamma -> trend
+# delta -> season
+ganhos.hw <- hw(ganhos.ts, seasonal = "additive", h = 4, alpha = 0.5, beta = 0.5, gamma = 0.7, initial = "simple", level = 0.95)
+
+autoplot(ganhos.hw) + 
+  autolayer(fitted(ganhos.hw), series = "Predicted") + 
+  autolayer(ganhos.ts, series = "Actual")+
+  guides(colour = guide_legend(title="Series")) + 
+  ylab("Earnings") + 
+  xlab("Time") 
+```
+
+Em seguida, podem ser calculados os valores de MAPE, MAD, e MSD, fazendo uso do próprio R.
+
+```{R, out.width = "80%", fig.align = "center", echo = FALSE}
+mape <- 0
+mad <- 0
+msd <- 0
+
+for(i in 1:length(ganhos.ts)){
+  mape <- mape + abs((ganhos.ts[i] - fitted(ganhos.hw)[i]) / ganhos.ts[i])
+  mad <- mad + abs(ganhos.ts[i] - fitted(ganhos.hw)[i])
+  msd <- msd + abs(ganhos.ts[i] - fitted(ganhos.hw)[i])^2
+}
+
+print(c("MAPE: ", mape * 100 / length(ganhos.ts)))
+print(c("MAD: ", mad / length(ganhos.hw)))
+print(c("MSD: ", msd / length(ganhos.hw)))
+
+```
+
+Pode-se, ainda, obter alguns outros valores associados ao modelo criado.
+
+```{R, out.width = "80%", fig.align = "center", echo = FALSE}
+round(accuracy(ganhos.hw), 2)
+
+```
+
+Em seguida, pode-se utilizar as otimizações de parâmetros implementadas na função `hw()` do R para encontrar os valores dos parâmetros considerados ótimos por ela. Para os modelos aditivo e multiplicativo, tem-se o seguinte.
+
+```{R, out.width = "80%", fig.align = "center", echo = FALSE}
+ganhos.hw.ad <- hw(ganhos.ts, seasonal = "additive", h = 4, initial = "optimal", level = 0.95)
+ganhos.hw.ad$model
+ganhos.hw.mu <- hw(ganhos.ts, seasonal = "multiplicative", h = 4, initial = "optimal", level = 0.95)
+ganhos.hw.mu$model
+
+```
+Assim, tem-se os parâmetros para cada um dos métodos agrupados na tabela abaixo.
+
+```{R, out.width = "80%", fig.align = "center", echo = FALSE}
+parametros.hw <- cbind(c("alpha = 0.0176", "beta  = 0.0176", "gamma = 0.9824"), c("alpha = 0.1979", "beta  = 0.0301", "gamma = 1e-04"))
+
+kable(parametros.hw, align = "c", col.names = c("Aditivo", "Multiplicativo"))
+```
+
+Tem-se ainda o seguinte para o modelo multiplicativo.
+
+```{R, out.width = "80%", fig.align = "center", echo = FALSE}
+round(accuracy(ganhos.hw.mu), 2)
+ganhos.hw.mu$fitted
+```
+
+E, para o modelo aditivo, tem-se a saída de `modelo$fitted`.
+
+```{R, out.width = "80%", fig.align = "center", echo = FALSE}
+ganhos.hw.ad$fitted
+```
+
+Por fim, tem-se a versão da figura 2 com o ajuste ótimo do Método Multiplicativo, com o intervalo de confiança de 95\%.
+
+```{R, out.width = "80%", fig.align = "center", echo = FALSE}
+autoplot(ganhos.hw.mu) + 
+  autolayer(fitted(ganhos.hw.mu), series = "Predicted") + 
+  autolayer(ganhos.ts, series = "Actual")+
+  guides(colour = guide_legend(title="Series")) + 
+  ylab("Earnings") + 
+  xlab("Time") 
+
+```
+
+---
+
+## Questão 10
+
+Primeiramente, analisando a expressão fornecida para as células do Excel, constata-se que esse é um método de Holt-Winters Multiplicativo, dado que a Sazonalidade é um termo multiplicativo, e não aditivo.
+
+Assim, para determinar o ajuste utilizando o método de Holt-Winters com o R, basta utilizar os dados fornecidos, bem como a opção `initial = "simple"`. Portanto, utilizando $\alpha=0.05$ $\beta=1$ e $\gamma=1$, obtém-se o gráfico abaixo. Para que ele fosse semelhante ao gráfico apresentado, o primeiro ano foi cortado da representação.
+
+```{R, out.width = "80%", fig.align = "center", echo = FALSE}
+# Dados
+sales <- c(490, 370, 330, 610, 571, 482, 557, 861, 895, 753, 1190, 1255, 786, 1684, 1868, 1589)
+sales.ts <- ts(sales, frequency = 4)
+
+# Ajuste do Barlow
+# Parametros do Barlow alpha <- 0.05 beta <- 1 gamma <- 1
+sales.hw.barlow <- hw(sales.ts, alpha = 0.05, beta = 1, gamma = 1, seasonal = "multiplicative", initial = "simple")
+
+# Cortar series para considerar apenas a partir do primeiro mes
+sales.ts.window <- window(sales.ts, start = 2)
+sales.hw.barlow.fitted <- window(fitted(sales.hw.barlow), start = 2)
+
+autoplot(sales.hw.barlow.fitted) + 
+  autolayer(sales.hw.barlow.fitted, series = "Holt-Winters") +
+  autolayer(sales.ts.window, series = "Actual Sales") + 
+  ggtitle("Ajuste de Holt-Winters com os Parâmetros do Barlow") + 
+  guides(colour = guide_legend(title="Series")) + 
+  ylab("Sales") + 
+  xlab("Quarterly Time Periods") 
+```
+Com o modelo criado, pode-se calcular o seu MSE, o que é feito a seguir.
+
+```{R, out.width = "80%", fig.align = "center", echo = FALSE}
+round(accuracy(sales.hw.barlow), 2)
+```
+
+Percebe-se que o RMSE desse ajuste é inferior ao do Barlow, dado que $254.76^2 = 64902.66 < 77882.7$, que é o MSE obtido no ajuste do livro. Pode-se, ainda, utilizar a implementação do R de Holt-Winters para realizar a otimização dos parâmetros.
+
+```{R, out.width = "80%", fig.align = "center", echo = FALSE}
+sales.hw.optimal <- hw(sales.ts, seasonal = "multiplicative", initial = "optimal")
+round(accuracy(sales.hw.optimal), 2)
+```
+Assim, observa-se que o modelo obtido possui um MSE ainda menor que o original, visto que $210.04^2 = 44116.8$. Os detalhes do modelo estão apresentados a seguir.
+
+
+```{R, out.width = "80%", fig.align = "center", echo = FALSE}
+sales.hw.optimal$model
+
+sales.hw.optimal$fitted
+```
+
+
+
+
+
+
+---
+
+## Questão 11
+
+Analisando o código apresentado, nota-se que é utilizada a função `ets`. Através da análise da sua documentação, constata-se que o parâmetro `model` que é passado corresponde a uma sigla de três letras que identifica o método. A primeira letra representa o tipo do erro, a segunda, o tipo da tendência, e a terceira, o tipo da sazonalidade.
+
+Assim, conclui-se que a sigla `AAN` corresponde a um modelo com erros e tendências aditivas, sem sazonalidade, enquanto a sigla `MMN` refere-se a um modelo com erros e tendências multiplicativas, também sem sazonalidade.
+
+Sabendo como utilizar a função, podem ser elaboradas novas figuras, com `h=5` e `h=10`.
+
+
+```{R, out.width = "80%", fig.align = "center", echo = FALSE}
+tumblr <- read_csv("Tumblr.csv")
+
+pessoas.ts <- ts(tumblr$`People Worldwide`) / 1000000
+
+pessoas.ets.AAN <- ets(pessoas.ts, model = "AAN")
+pessoas.ets.MMN <- ets(pessoas.ts, model = "MMN", damped = FALSE)
+pessoas.ets.MMdN <- ets(pessoas.ts, model = "MMN", damped = TRUE)
+
+# Figura com h = 5
+
+pessoas.ets.AAN.pred <- forecast(pessoas.ets.AAN, h = 5, level = c(0.2, 0.4, 0.6, 0.8))
+pessoas.ets.MMN.pred <- forecast(pessoas.ets.MMN, h = 5, level = c(0.2, 0.4, 0.6, 0.8))
+pessoas.ets.MMdN.pred <- forecast(pessoas.ets.MMdN, h = 5, level = c(0.2, 0.4, 0.6, 0.8))
+
+par(mfrow = c(1,3))
+
+plot(pessoas.ets.AAN.pred, xlab = "Meses", ylab = "Pessoas (Em Milhões)", ylim = c(0, 1000))
+plot(pessoas.ets.MMN.pred, xlab = "Meses", ylab = "Pessoas (Em Milhões)", ylim = c(0, 1000))
+plot(pessoas.ets.MMdN.pred, xlab = "Meses", ylab = "Pessoas (Em Milhões)", ylim = c(0, 1000))
+
+# Figura com h = 10
+
+pessoas.ets.AAN.pred <- forecast(pessoas.ets.AAN, h = 10, level = c(0.2, 0.4, 0.6, 0.8))
+pessoas.ets.MMN.pred <- forecast(pessoas.ets.MMN, h = 10, level = c(0.2, 0.4, 0.6, 0.8))
+pessoas.ets.MMdN.pred <- forecast(pessoas.ets.MMdN, h = 10, level = c(0.2, 0.4, 0.6, 0.8))
+
+par(mfrow = c(1,3))
+
+plot(pessoas.ets.AAN.pred, xlab = "Meses", ylab = "Pessoas (Em Milhões)", ylim = c(0, 1000))
+plot(pessoas.ets.MMN.pred, xlab = "Meses", ylab = "Pessoas (Em Milhões)", ylim = c(0, 1000))
+plot(pessoas.ets.MMdN.pred, xlab = "Meses", ylab = "Pessoas (Em Milhões)", ylim = c(0, 1000))
+
+```
+
+Por fim, quando é escolhida a configuração `damped = TRUE`, a tendência é amortecida, de maneira que a série da variável `pessoas.ets.MMdN.pred` é uma série com tendência multiplicativa amortecida, e sem sazonalidade. Assim, utilizando a tabela que foi apresentada em aula, tem-se as equações que definem esse modelo.
+
+$$
+\begin{cases}
+    l_t = \alpha y_t + (1- \alpha)l_{t-1}b^\phi_{t-1}\\
+    b_t = \beta^*(\frac{l_t}{l_{t-1}}) + (1- \beta^*)b^\phi_{t-1}\\
+    \hat{y}_{t+h|t} = l_tb_t^{\phi_h}
+\end{cases}
+$$

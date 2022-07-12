@@ -801,3 +801,8 @@ Finalmente, temos a previsão para o valor seguinte de cada uma das séries, que
 
 
 
+
+
+# Conclusão
+
+Os códigos utilizados para a elaboração da solução da prova estão disponíveis no seguinte *[repositório do git](https://github.com/Costa-SM/ged-17)*.

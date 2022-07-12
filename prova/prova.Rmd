@@ -1,0 +1,802 @@
+---
+title: "Prova GED-17"
+author: "Arthur Stevenson"
+date: '2022-07-05'
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(ggplot2)
+library(forecast)
+library(lubridate)
+library(gridExtra)
+library(readxl)
+library(knitr)
+library(stats)
+library(tseries)
+library(TSA)
+library(FinTS)
+library(aTSA)
+library(nortsTest)
+library(fGarch)
+
+library(quantmod) # Para usar o "getSymbols"
+start <- as.Date("2022-01-01")
+end <- as.Date("2022-07-12")
+
+dados.sp <- quantmod::getSymbols("^GSPC", src = "yahoo", from = start, to = end, auto.assign = FALSE)
+stdpoors <- na.omit(dados.sp)
+
+dados.dj <- quantmod::getSymbols("^DJI", src = "yahoo", from = start, to = end, auto.assign = FALSE)
+dowjones <- na.omit(dados.dj)
+
+dados.nasdaq <- quantmod::getSymbols("^IXIC", src = "yahoo", from = start, to = end, auto.assign = FALSE)
+nasdaq <- na.omit(dados.nasdaq)
+
+dados.bovespa <- quantmod::getSymbols("^BVSP", src = "yahoo", from = start, to = end, auto.assign = FALSE)
+bovespa <- na.omit(dados.bovespa)
+
+dados.brent <- quantmod::getSymbols("BZ=F", src = "yahoo", from = start, to = end, auto.assign = FALSE)
+brent <- na.omit(dados.brent)
+
+dados.dolar.real <- quantmod::getSymbols("BRL=X", src = "yahoo", from = start, to = end, auto.assign = FALSE)
+dolar.real <- na.omit(dados.dolar.real)
+
+dados.btc <- quantmod::getSymbols("BTC-USD", src = "yahoo", from = start, to = end, auto.assign = FALSE)
+dolar.bitcoin <- na.omit(dados.btc)
+```
+
+# Introdução
+
+Inicialmente, são fornecidas várias séries temporais, representando os valores de diferentes índices, como o Bovespa, e a cotação de diferentes moedas, como o Dólar. Assim, tratando dos valores de fechamento para essas séries, podemos gerar os seus respectivos plots.
+
+```{R, out.width = "80%", fig.align = "center", echo = FALSE}
+# Gerar ts de cada um dos indices
+# Gerar o plot de cada um dos indices
+stdpoors.ts <- ts(stdpoors$GSPC.Close)
+autoplot(stdpoors.ts) +
+  xlab("Dias do Ano") + 
+  ylab("Valor de Fechamento") + 
+  ggtitle("Índice S&P500")
+
+dowjones.ts <- ts(dowjones$DJI.Close)
+autoplot(dowjones.ts) +
+  xlab("Dias do Ano") + 
+  ylab("Valor de Fechamento") + 
+  ggtitle("Índice Dow Jones")
+
+nasdaq.ts <- ts(nasdaq$IXIC.Close)
+autoplot(nasdaq.ts) +
+  xlab("Dias do Ano") + 
+  ylab("Valor de Fechamento") + 
+  ggtitle("Índice Nasdaq")
+
+bovespa.ts <- ts(bovespa$BVSP.Close)
+autoplot(bovespa.ts) +
+  xlab("Dias do Ano") + 
+  ylab("Valor de Fechamento") + 
+  ggtitle("Índice IBOVESPA")
+
+brent.ts <- ts(brent$`BZ=F.Close`)
+autoplot(brent.ts) +
+  xlab("Dias do Ano") + 
+  ylab("Valor de Fechamento") + 
+  ggtitle("Preço do Petróleo Brent")
+
+dolar.ts <- ts(dolar.real$`BRL=X.Close`)
+autoplot(dolar.ts) +
+  xlab("Dias do Ano") + 
+  ylab("Valor de Fechamento") + 
+  ggtitle("Cotação Dólar/Real")
+
+bitcoin.ts <- ts(dolar.bitcoin$`BTC-USD.Close`)
+autoplot(bitcoin.ts) +
+  xlab("Dias do Ano") + 
+  ylab("Valor de Fechamento") + 
+  ggtitle("Bitcoin")
+
+```
+
+Em seguida, podemos fazer o teste ADF para as séries temporais originais obtidas.
+
+```{R, out.width = "80%", fig.align = "center", echo = FALSE}
+adf.test(stdpoors.ts)
+adf.test(dowjones.ts)
+adf.test(nasdaq.ts)
+adf.test(bovespa.ts)
+adf.test(brent.ts)
+adf.test(dolar.ts)
+adf.test(bitcoin.ts)
+```
+
+------------------------------------------------------------------------
+
+# Diferença do Logaritmo
+
+Analisando-se os resultados dos ADFs de cada uma das séries temporais, nota-se que todos os p-valores encontrados são superiores a 5%. Portanto, não podemos rejeitar a hipótese nula e, assim, é necessária uma transformação na série para que seja possível trabalhá-la.
+
+Com os plots das séries temporais, podemos, então, obter as séries do log, e da diferença do log e, assim realizar o teste ADF novamente. Analisando-se os resultados, nota-se que há uma queda considerável nos p-valores de todas as séries analisadas.
+
+```{R, out.width = "80%", fig.align = "center", echo = FALSE}
+# Series do log
+stdpoors.ts.log <- log(stdpoors.ts)
+dowjones.ts.log <- log(dowjones.ts)
+nasdaq.ts.log <- log(nasdaq.ts)
+bovespa.ts.log <- log(bovespa.ts)
+brent.ts.log <- log(brent.ts)
+dolar.ts.log <- log(dolar.ts)
+bitcoin.ts.log <- log(bitcoin.ts)
+
+# Series da diferenca do log
+stdpoors.ts.difflog <- diff(log(stdpoors.ts))
+dowjones.ts.difflog <- diff(log(dowjones.ts))
+nasdaq.ts.difflog <- diff(log(nasdaq.ts))
+bovespa.ts.difflog <- diff(log(bovespa.ts))
+brent.ts.difflog <- diff(log(brent.ts))
+dolar.ts.difflog <- diff(log(dolar.ts))
+bitcoin.ts.difflog <- diff(log(bitcoin.ts))
+```
+
+Nesses novos casos, constata-se que os p-valores das séries são, novamente, significativamente menores e, mais importante que isso, que eles são inferiores à margem significativa de 5%. Dessa forma, podemos rejeitar a hipótese nula, e é seguro supor que a série é estacionária.
+
+```{R, out.width = "80%", fig.align = "center", echo = FALSE}
+# Teste ADF das series da diferenca do log
+adf.test(stdpoors.ts.difflog)
+adf.test(dowjones.ts.difflog)
+adf.test(nasdaq.ts.difflog)
+adf.test(bovespa.ts.difflog)
+adf.test(brent.ts.difflog)
+adf.test(dolar.ts.difflog)
+adf.test(bitcoin.ts.difflog)
+```
+
+------------------------------------------------------------------------
+
+Assim, com os resultados do teste ADF, podemos então realizar o plot das séries da diferença do logaritmo.
+
+```{R, out.width = "80%", fig.align = "center", echo = FALSE}
+autoplot(stdpoors.ts.difflog) + 
+  xlab("Dias do Ano") +
+  ggtitle("Diferença do Logaritmo de S&P500")
+autoplot(dowjones.ts.difflog) + 
+  xlab("Dias do Ano") +
+  ggtitle("Diferença do Logaritmo de Dow Jones")
+autoplot(nasdaq.ts.difflog) + 
+  xlab("Dias do Ano") +
+  ggtitle("Diferença do Logaritmo de Nasdaq")
+autoplot(bovespa.ts.difflog) + 
+  xlab("Dias do Ano") +
+  ggtitle("Diferença do Logaritmo de IBOVESPA")
+autoplot(brent.ts.difflog) + 
+  xlab("Dias do Ano") +
+  ggtitle("Diferença do Logaritmo de Petróleo Brent")
+autoplot(dolar.ts.difflog) + 
+  xlab("Dias do Ano") +
+  ggtitle("Diferença do Logaritmo de Dólar")
+autoplot(bitcoin.ts.difflog) + 
+  xlab("Dias do Ano") +
+  ggtitle("Diferença do Logaritmo de Bitcoin")
+
+```
+
+------------------------------------------------------------------------
+
+# Correlogramas
+
+Feitos os plots das diferenças dos logaritmos, podemos, então, construir o correlograma da série da diferença do logaritmo de cada uma das séries criadas.
+
+```{R, out.width = "80%", fig.align = "center", echo = FALSE}
+Acf(stdpoors.ts.difflog, ylab="FAC S&P500")
+pacf(stdpoors.ts.difflog, ylab="FACP S&P500")
+
+Acf(dowjones.ts.difflog, ylab="FAC Dow Jones")
+pacf(dowjones.ts.difflog, ylab="FACP Dow Jones")
+
+Acf(nasdaq.ts.difflog, ylab="FAC Nasdaq")
+pacf(nasdaq.ts.difflog, ylab="FACP Nasdaq")
+
+Acf(bovespa.ts.difflog, ylab="FAC IBOVESPA")
+pacf(bovespa.ts.difflog, ylab="FACP IBOVESPA")
+
+Acf(brent.ts.difflog, ylab="FAC Brent")
+pacf(brent.ts.difflog, ylab="FACP Brent")
+
+Acf(dolar.ts.difflog, ylab="FAC Dólar")
+pacf(dolar.ts.difflog, ylab="FACP Dólar")
+
+Acf(bitcoin.ts.difflog, ylab="FAC Bitcoin")
+pacf(bitcoin.ts.difflog, ylab="FACP Bitcoin")
+
+```
+
+Assim, observando-se os correlogramas gerados, pode ser extrapolado o melhor modelo para cada uma das séries analisadas. Dessa forma, temos que:
+
+-   S&P500: FAC e FACP ambas declinantes. Consideramos ARMA(1,1).
+
+-   Dow Jones: FAC e FACP declinantes. Consideramos ARMA(1,1) a ARMA(2,2), com as combinações intermediárias.
+
+-   Nasdaq: FAC e FACP declinantes. Consideramos ARMA(3,3).
+
+-   IBOVESPA: FAC e FACP declinantes. Consideramos de ARMA(1,1) a ARMA(2,2), com as combinações intermediárias.
+
+-   Brent: FAC e FACP declinantes. Consideramos de ARMA(1, 1) a ARMA(3,3), com as combinações intermediárias.
+
+-   Dólar: FAC e FACP declinantes. Consideramos ARMA(1,1).
+
+-   Bitcoin: FAC e FACP declinantes. Consideramos ARMA(1,1).
+
+Portanto, podemos então estimar os diferentes modelos ARMA para cada uma das séries analisadas, e verificar a significância dos coeficientes de cada um. Ademais, podem ser feitos os testes e plotados o gráfico do teste de Ljung-Box, para analisar os resíduos de cada modelo.
+
+# p-valores
+
+### S&P500
+
+```{R, out.width = "80%", fig.align = "center", echo = FALSE}
+  stdpoors.ts.arma <- arima(stdpoors.ts, order = c(1, 0, 1))
+
+  # p-valores
+  modelo.arma <- stdpoors.ts.arma
+  modelo.difflog <- stdpoors.ts.difflog
+
+  coeficientes.estimados.ma <- coef(modelo.arma)
+  covariancias.ma <- vcov(modelo.arma)
+  covariancias.ma
+  
+  estat.t.ar1 <- coeficientes.estimados.ma[1]/sqrt(covariancias.ma[1,1])
+  estat.t.ma1 <- coeficientes.estimados.ma[2]/sqrt(covariancias.ma[2,2])
+  estat.t.intercepto.ma <- coeficientes.estimados.ma[3]/sqrt(covariancias.ma[3,3])
+  
+  tamanho.amostra <- length(modelo.difflog)
+  qtd.param.estimados.ma <- length(coeficientes.estimados.ma)
+  
+  graus.liberdade.ma <- tamanho.amostra  - qtd.param.estimados.ma
+  
+  p.valor.intercepto.ma <- 1 - pt(estat.t.intercepto.ma, graus.liberdade.ma)
+  p.valor.ma1 <- 1 - pt(estat.t.ma1, graus.liberdade.ma)
+  p.valor.ar1 <- 1 - pt(estat.t.ar1, graus.liberdade.ma)
+  p.valor.intercepto.ma
+  p.valor.ar1
+  p.valor.ma1
+
+```
+
+Analisando os p-valores, nota-se que o referente ao índice 1 do modelo MA é superior a 5%. Assim, consideramos um modelo AR(1) para a série S&P500.
+
+### Dow Jones
+
+```{R, out.width = "80%", fig.align = "center", echo = FALSE}
+  dowjones.ts.arma22 <- arima(dowjones.ts, order = c(2, 0, 2))
+  
+  # p-valores
+  modelo.arma <- dowjones.ts.arma22
+  modelo.difflog <- dowjones.ts.difflog
+
+  coeficientes.estimados.ma <- coef(modelo.arma)
+  covariancias.ma <- vcov(modelo.arma)
+  covariancias.ma
+  
+  estat.t.ar1 <- coeficientes.estimados.ma[1]/sqrt(covariancias.ma[1,1])
+  estat.t.ar2 <- coeficientes.estimados.ma[2]/sqrt(covariancias.ma[2,2])
+  estat.t.ma1 <- coeficientes.estimados.ma[3]/sqrt(covariancias.ma[3,3])
+  estat.t.ma2 <- coeficientes.estimados.ma[4]/sqrt(covariancias.ma[4,4])
+  estat.t.intercepto.ma <- coeficientes.estimados.ma[5]/sqrt(covariancias.ma[5,5])
+  
+  tamanho.amostra <- length(modelo.difflog)
+  qtd.param.estimados.ma <- length(coeficientes.estimados.ma)
+  
+  graus.liberdade.ma <- tamanho.amostra  - qtd.param.estimados.ma
+  
+  p.valor.intercepto.ma <- 1 - pt(estat.t.intercepto.ma, graus.liberdade.ma)
+  p.valor.ma1 <- 1 - pt(estat.t.ma1, graus.liberdade.ma)
+  p.valor.ma2 <- 1 - pt(estat.t.ma2, graus.liberdade.ma)
+  p.valor.ar1 <- 1 - pt(estat.t.ar1, graus.liberdade.ma)
+  p.valor.ar2 <- 1 - pt(estat.t.ar2, graus.liberdade.ma)
+  p.valor.intercepto.ma
+  p.valor.ma1
+  p.valor.ma2
+  p.valor.ar1
+  p.valor.ar2
+  
+```
+
+Analisando os p-valores, nota-se que os referentes aos índice 2 do modelo MA e ao índice 1 do modelo AR são os únicos superiores a 5%. Portanto, consideramos um modelo MA(1) para a série Dow Jones.
+
+### Nasdaq
+
+```{R, out.width = "80%", fig.align = "center", echo = FALSE}
+  nasdaq.ts.arma <- arima(nasdaq.ts, order = c(3, 0, 3))
+
+  # p-valores
+  modelo.arma <- nasdaq.ts.arma
+  modelo.difflog <- nasdaq.ts.difflog
+
+  coeficientes.estimados.ma <- coef(modelo.arma)
+  covariancias.ma <- vcov(modelo.arma)
+  
+  estat.t.ar1 <- coeficientes.estimados.ma[1]/sqrt(covariancias.ma[1,1])
+  estat.t.ar2 <- coeficientes.estimados.ma[2]/sqrt(covariancias.ma[2,2])
+  estat.t.ar3 <- coeficientes.estimados.ma[3]/sqrt(covariancias.ma[3,3])
+  estat.t.ma1 <- coeficientes.estimados.ma[4]/sqrt(covariancias.ma[4,4])
+  estat.t.ma2 <- coeficientes.estimados.ma[5]/sqrt(covariancias.ma[5,5])
+  estat.t.ma3 <- coeficientes.estimados.ma[6]/sqrt(covariancias.ma[6,6])
+  estat.t.intercepto.ma <- coeficientes.estimados.ma[7]/sqrt(covariancias.ma[7,7])
+  
+  tamanho.amostra <- length(modelo.difflog)
+  qtd.param.estimados.ma <- length(coeficientes.estimados.ma)
+  
+  graus.liberdade.ma <- tamanho.amostra  - qtd.param.estimados.ma
+  
+  p.valor.intercepto.ma <- 1 - pt(estat.t.intercepto.ma, graus.liberdade.ma)
+  p.valor.ma1 <- 1 - pt(estat.t.ma1, graus.liberdade.ma)
+  p.valor.ma2 <- 1 - pt(estat.t.ma2, graus.liberdade.ma)
+  p.valor.ma3 <- 1 - pt(estat.t.ma3, graus.liberdade.ma)
+  p.valor.ar1 <- 1 - pt(estat.t.ar1, graus.liberdade.ma)
+  p.valor.ar2 <- 1 - pt(estat.t.ar2, graus.liberdade.ma)
+  p.valor.ar3 <- 1 - pt(estat.t.ar3, graus.liberdade.ma)
+  p.valor.intercepto.ma
+  p.valor.ma1
+  p.valor.ma2
+  p.valor.ma3
+  
+  p.valor.ar1
+  p.valor.ar2
+  p.valor.ar3
+
+```
+
+Analisando os p-valores, nota-se que os referentes ao índice 3 do modelo MA e ao índice 1 do modelo AR são superiores a 5%. Logo, o modelo considerado para a série Nasdaq é um MA(2).
+
+### IBOVESPA
+
+```{R, out.width = "80%", fig.align = "center", echo = FALSE}
+  bovespa.ts.arma <- arima(bovespa.ts, order = c(2, 0, 2))
+
+  # p-valores
+  modelo.arma <- bovespa.ts.arma
+  modelo.difflog <- bovespa.ts.difflog
+
+  coeficientes.estimados.ma <- coef(modelo.arma)
+  covariancias.ma <- vcov(modelo.arma)
+  
+  estat.t.ar1 <- coeficientes.estimados.ma[1]/sqrt(covariancias.ma[1,1])
+  estat.t.ar2 <- coeficientes.estimados.ma[2]/sqrt(covariancias.ma[2,2])
+  estat.t.ma1 <- coeficientes.estimados.ma[3]/sqrt(covariancias.ma[3,3])
+  estat.t.ma2 <- coeficientes.estimados.ma[4]/sqrt(covariancias.ma[4,4])
+  estat.t.intercepto.ma <- coeficientes.estimados.ma[5]/sqrt(covariancias.ma[5,5])
+  
+  tamanho.amostra <- length(modelo.difflog)
+  qtd.param.estimados.ma <- length(coeficientes.estimados.ma)
+  
+  graus.liberdade.ma <- tamanho.amostra  - qtd.param.estimados.ma
+  
+  p.valor.intercepto.ma <- 1 - pt(estat.t.intercepto.ma, graus.liberdade.ma)
+  p.valor.ma1 <- 1 - pt(estat.t.ma1, graus.liberdade.ma)
+  p.valor.ma2 <- 1 - pt(estat.t.ma2, graus.liberdade.ma)
+  p.valor.ar1 <- 1 - pt(estat.t.ar1, graus.liberdade.ma)
+  p.valor.ar2 <- 1 - pt(estat.t.ar2, graus.liberdade.ma)
+  p.valor.intercepto.ma
+  p.valor.ma1
+  p.valor.ma2
+  p.valor.ar1
+  p.valor.ar2
+
+```
+
+Analisando os p-valores, temos que o modelo para a série referente a IBOVESPA é um ARMA(2,2).
+
+### Petróleo Brent
+
+```{R, out.width = "80%", fig.align = "center", echo = FALSE}
+  brent.ts.arma <- arima(brent.ts, order = c(3, 0, 3))
+
+  # p-valores
+  modelo.arma <- brent.ts.arma
+  modelo.difflog <- brent.ts.difflog
+
+  coeficientes.estimados.ma <- coef(modelo.arma)
+  covariancias.ma <- vcov(modelo.arma)
+  
+  estat.t.ar1 <- coeficientes.estimados.ma[1]/sqrt(covariancias.ma[1,1])
+  estat.t.ar2 <- coeficientes.estimados.ma[2]/sqrt(covariancias.ma[2,2])
+  estat.t.ar3 <- coeficientes.estimados.ma[3]/sqrt(covariancias.ma[3,3])
+  estat.t.ma1 <- coeficientes.estimados.ma[4]/sqrt(covariancias.ma[4,4])
+  estat.t.ma2 <- coeficientes.estimados.ma[5]/sqrt(covariancias.ma[5,5])
+  estat.t.ma3 <- coeficientes.estimados.ma[6]/sqrt(covariancias.ma[6,6])
+  estat.t.intercepto.ma <- coeficientes.estimados.ma[7]/sqrt(covariancias.ma[7,7])
+  
+  tamanho.amostra <- length(modelo.difflog)
+  qtd.param.estimados.ma <- length(coeficientes.estimados.ma)
+  
+  graus.liberdade.ma <- tamanho.amostra  - qtd.param.estimados.ma
+  
+  p.valor.intercepto.ma <- 1 - pt(estat.t.intercepto.ma, graus.liberdade.ma)
+  p.valor.ma1 <- 1 - pt(estat.t.ma1, graus.liberdade.ma)
+  p.valor.ma2 <- 1 - pt(estat.t.ma2, graus.liberdade.ma)
+  p.valor.ma3 <- 1 - pt(estat.t.ma3, graus.liberdade.ma)
+  p.valor.ar1 <- 1 - pt(estat.t.ar1, graus.liberdade.ma)
+  p.valor.ar2 <- 1 - pt(estat.t.ar2, graus.liberdade.ma)
+  p.valor.ar3 <- 1 - pt(estat.t.ar3, graus.liberdade.ma)
+  p.valor.intercepto.ma
+  p.valor.ma1
+  p.valor.ma2
+  p.valor.ma3
+  
+  p.valor.ar1
+  p.valor.ar2
+  p.valor.ar3
+
+```
+
+Analisando os p-valores, temos que o modelo para a série referente ao petróleo Brent é um MA(2).
+
+### Dólar
+
+```{R, out.width = "80%", fig.align = "center", echo = FALSE}
+  dolar.ts.arma <- arima(dolar.ts, order = c(1, 0, 1))
+  
+  # p-valores
+  modelo.arma <- dolar.ts.arma
+  modelo.difflog <- dolar.ts.difflog
+
+  coeficientes.estimados.ma <- coef(modelo.arma)
+  covariancias.ma <- vcov(modelo.arma)
+  covariancias.ma
+  
+  estat.t.ar1 <- coeficientes.estimados.ma[1]/sqrt(covariancias.ma[1,1])
+  estat.t.ma1 <- coeficientes.estimados.ma[2]/sqrt(covariancias.ma[2,2])
+  estat.t.intercepto.ma <- coeficientes.estimados.ma[3]/sqrt(covariancias.ma[3,3])
+  
+  tamanho.amostra <- length(modelo.difflog)
+  qtd.param.estimados.ma <- length(coeficientes.estimados.ma)
+  
+  graus.liberdade.ma <- tamanho.amostra  - qtd.param.estimados.ma
+  
+  p.valor.intercepto.ma <- 1 - pt(estat.t.intercepto.ma, graus.liberdade.ma)
+  p.valor.ma1 <- 1 - pt(estat.t.ma1, graus.liberdade.ma)
+  p.valor.ar1 <- 1 - pt(estat.t.ar1, graus.liberdade.ma)
+  p.valor.intercepto.ma
+  p.valor.ar1
+  p.valor.ma1
+
+```
+
+Analisando os p-valores, temos que o modelo para a série referente ao Dólar é um AR(1).
+
+### Bitcoin
+
+```{R, out.width = "80%", fig.align = "center", echo = FALSE}
+  bitcoin.ts.arma <- arima(bitcoin.ts, order = c(1, 0, 1))
+
+# p-valores
+  modelo.arma <- bitcoin.ts.arma
+  modelo.difflog <- bitcoin.ts.difflog
+
+  coeficientes.estimados.ma <- coef(modelo.arma)
+  covariancias.ma <- vcov(modelo.arma)
+  covariancias.ma
+  
+  estat.t.ar1 <- coeficientes.estimados.ma[1]/sqrt(covariancias.ma[1,1])
+  estat.t.ma1 <- coeficientes.estimados.ma[2]/sqrt(covariancias.ma[2,2])
+  estat.t.intercepto.ma <- coeficientes.estimados.ma[3]/sqrt(covariancias.ma[3,3])
+  
+  tamanho.amostra <- length(modelo.difflog)
+  qtd.param.estimados.ma <- length(coeficientes.estimados.ma)
+  
+  graus.liberdade.ma <- tamanho.amostra  - qtd.param.estimados.ma
+  
+  p.valor.intercepto.ma <- 1 - pt(estat.t.intercepto.ma, graus.liberdade.ma)
+  p.valor.ma1 <- 1 - pt(estat.t.ma1, graus.liberdade.ma)
+  p.valor.ar1 <- 1 - pt(estat.t.ar1, graus.liberdade.ma)
+  p.valor.intercepto.ma
+  p.valor.ar1
+  p.valor.ma1
+```
+
+Analisando os p-valores, temos que o modelo para a série referente ao Bitcoin é um AR(1).
+
+------------------------------------------------------------------------
+
+# Teste de Ljung-Box
+
+Assim, podemos então plotar os gráficos referentes ao teste de Ljung-Box.
+
+### S&P 500
+
+```{R, out.width = "80%", fig.align = "center", echo = FALSE}
+modelo.arma <- arima(stdpoors.ts.difflog, order = c(1, 0, 0))
+tsdiag(modelo.arma,gof.lag=20,omit.initial=F)
+Box.test(rstandard(modelo.arma), lag = 20, type = "Ljung-Box")
+sp500arma <- modelo.arma
+```
+
+### Dow Jones
+
+```{R, out.width = "80%", fig.align = "center", echo = FALSE}
+modelo.arma <- arima(dowjones.ts.difflog, order = c(0, 0, 1))
+tsdiag(modelo.arma,gof.lag=20,omit.initial=F)
+Box.test(rstandard(modelo.arma), lag = 20, type = "Ljung-Box")
+djarma <- modelo.arma
+```
+
+### Nasdaq
+
+```{R, out.width = "80%", fig.align = "center", echo = FALSE}
+modelo.arma <- arima(nasdaq.ts.difflog, order = c(0, 0, 2))
+tsdiag(modelo.arma,gof.lag=20,omit.initial=F)
+Box.test(rstandard(modelo.arma), lag = 20, type = "Ljung-Box")
+nasdaqarma <- modelo.arma
+```
+
+### IBOVESPA
+
+```{R, out.width = "80%", fig.align = "center", echo = FALSE}
+modelo.arma <- arima(bovespa.ts.difflog, order = c(2, 0, 2))
+tsdiag(modelo.arma,gof.lag=20,omit.initial=F)
+Box.test(rstandard(modelo.arma), lag = 20, type = "Ljung-Box")
+bovespaarma <- modelo.arma
+```
+
+### Petróleo Brent
+
+```{R, out.width = "80%", fig.align = "center", echo = FALSE}
+modelo.arma <- arima(brent.ts.difflog, order = c(0, 0, 2))
+tsdiag(modelo.arma,gof.lag=20,omit.initial=F)
+Box.test(rstandard(modelo.arma), lag = 20, type = "Ljung-Box")
+brentarma <- modelo.arma
+```
+
+### Dólar
+
+```{R, out.width = "80%", fig.align = "center", echo = FALSE}
+modelo.arma <- arima(dolar.ts.difflog, order = c(1, 0, 0))
+tsdiag(modelo.arma,gof.lag=20,omit.initial=F)
+Box.test(rstandard(modelo.arma), lag = 20, type = "Ljung-Box")
+dolararma <- modelo.arma
+```
+
+### Bitcoin
+
+```{R, out.width = "80%", fig.align = "center", echo = FALSE}
+modelo.arma <- arima(bitcoin.ts.difflog, order = c(1, 0, 0))
+tsdiag(modelo.arma,gof.lag=20,omit.initial=F)
+Box.test(rstandard(modelo.arma), lag = 20, type = "Ljung-Box")
+bitcoinarma <- modelo.arma
+```
+
+Portanto, analisando-se os gráficos gerados acima, constata-se que todos os modelos supercedem o requisito dos p-valores serem superiores a 5% e, portanto, são adequados para serem utilizados.
+
+Ademais, temos que os resultados dos testes adicionais realizados nos dizem para não rejeitarmos a Hipótese Nula de que todas as funções de autocorrelação até 20 são zero, para todas as séries analisadas.
+
+# Correlograma dos Resíduos ao Quadrado
+
+Portanto, temos o correlograma dos resíduos ao quadrado para cada uma das séries analisadas.
+
+```{R, out.width = "80%", fig.align = "center", echo = FALSE}
+acf(sp500arma$residuals^2, main = "Correlograma dos Resíduos ao Quadrado (S&P500)")
+acf(djarma$residuals^2, main = "Correlograma dos Resíduos ao Quadrado (Dow Jones)")
+acf(nasdaqarma$residuals^2, main = "Correlograma dos Resíduos ao Quadrado (Nasdaq)")
+acf(bovespaarma$residuals^2, main = "Correlograma dos Resíduos ao Quadrado (IBOVESPA)")
+acf(brentarma$residuals^2, main = "Correlograma dos Resíduos ao Quadrado (Petróleo Brent)")
+acf(dolararma$residuals^2, main = "Correlograma dos Resíduos ao Quadrado (Dólar)")
+acf(bitcoinarma$residuals^2, main = "Correlograma dos Resíduos ao Quadrado (Bitcoin)")
+```
+
+Portanto, podem ser utilizados os correlogramas gerados para auxiliar na escolha dos modelos ARCH/GARCH que será feita a seguir.
+
+# Teste de Efeitos ARCH e Escolha do Processo
+
+Para tal, usaremos as funções fornecidas nas bibliotecas do R. Temos os seguintes resultados para cada uma das séries temporais estudadas:
+
+### S&P500
+
+```{R, out.width = "80%", fig.align = "center", echo = FALSE}
+  seriearima <- sp500arma
+  sqresidual <- seriearima$residuals^2
+  ArchTest(sqresidual, lag = 6)
+  aTSA::arch.test(seriearima)
+  nortsTest::arch.test(stdpoors.ts, lag.max = 6)
+```
+
+Do primeiro teste, temos um p-valor superior a 5%, portanto, não rejeitamos que haja efeito ARCH. Do segundo teste, temos que há valores superiores a 5%, então, rejeitamos que haja heterocedasticidade no modelo. Do terceiro teste, temos que o p-valor é inferior a 5%, então não rejeitamos a hipótese de que a série seja heterocedástica.
+
+Assim, tomamos um modelo GARCH para representar a série.
+
+### Dow Jones
+
+```{R, out.width = "80%", fig.align = "center", echo = FALSE}
+  seriearima <- djarma
+  sqresidual <- seriearima$residuals^2
+  ArchTest(sqresidual, lag = 6)
+  aTSA::arch.test(seriearima)
+  nortsTest::arch.test(dowjones.ts, lag.max = 6)
+```
+
+Do primeiro teste, temos um p-valor superior a 5%, portanto, não rejeitamos que haja efeito ARCH. Do segundo teste, temos que há valores superiores a 5%, então, rejeitamos que haja heterocedasticidade no modelo. Do terceiro teste, temos que o p-valor é inferior a 5%, então não rejeitamos a hipótese de que a série seja heterocedástica.
+
+Assim, tomamos um modelo GARCH para representar a série.
+
+### Nasdaq
+
+```{R, out.width = "80%", fig.align = "center", echo = FALSE}
+  seriearima <- nasdaqarma
+  sqresidual <- seriearima$residuals^2
+  ArchTest(sqresidual, lag = 6)
+  aTSA::arch.test(seriearima)
+  nortsTest::arch.test(nasdaq.ts, lag.max = 6)
+```
+
+Do primeiro teste, temos um p-valor superior a 5%, portanto, não rejeitamos que haja efeito ARCH. Do segundo teste, temos que há valores superiores a 5%, então, rejeitamos que haja heterocedasticidade no modelo. Do terceiro teste, temos que o p-valor é inferior a 5%, então não rejeitamos a hipótese de que a série seja heterocedástica.
+
+Assim, tomamos um modelo ARCH para representar a série.
+
+### IBOVESPA
+
+```{R, out.width = "80%", fig.align = "center", echo = FALSE}
+  seriearima <- bovespaarma
+  sqresidual <- seriearima$residuals^2
+  ArchTest(sqresidual, lag = 6)
+  aTSA::arch.test(seriearima)
+  nortsTest::arch.test(bovespa.ts, lag.max = 6)
+```
+
+Do primeiro teste, temos um p-valor superior a 5%, portanto, não rejeitamos que haja efeito ARCH. Do segundo teste, temos que há valores superiores a 5%, então, rejeitamos que haja heterocedasticidade no modelo. Do terceiro teste, temos que o p-valor é inferior a 5%, então não rejeitamos a hipótese de que a série seja heterocedástica.
+
+Assim, tomamos um modelo ARCH para representar a série.
+
+### Petróleo Brent
+
+```{R, out.width = "80%", fig.align = "center", echo = FALSE}
+  seriearima <- brentarma
+  sqresidual <- seriearima$residuals^2
+  ArchTest(sqresidual, lag = 6)
+  aTSA::arch.test(seriearima)
+  nortsTest::arch.test(brent.ts, lag.max = 6)
+```
+
+Do primeiro teste, temos um p-valor inferior a 5%, portanto, rejeitamos que haja efeito ARCH. Do segundo teste, nota-se que há p-valores inferioresa 5% apenas para os casos de ordem 8, 12 e 16. Do terceiro teste, temos que o p-valor é inferior a 5%, então não rejeitamos a hipótese de que a série seja heterocedástica.
+
+Assim, tomamos um modelo ARCH para representar a série.
+
+### Dólar
+
+```{R, out.width = "80%", fig.align = "center", echo = FALSE}
+  seriearima <- dolararma
+  sqresidual <- seriearima$residuals^2
+  ArchTest(sqresidual, lag = 6)
+  aTSA::arch.test(seriearima)
+  nortsTest::arch.test(dolar.ts, lag.max = 6)
+```
+
+Do primeiro teste, temos um p-valor superior a 5%, portanto, não rejeitamos que haja efeito ARCH. Do segundo teste, temos que há valores superiores a 5%, então, rejeitamos que haja heterocedasticidade no modelo. Do terceiro teste, temos que o p-valor é inferior a 5%, então não rejeitamos a hipótese de que a série seja heterocedástica.
+
+Assim, tomamos um modelo GARCH para representar a série.
+
+### Bitcoin
+
+```{R, out.width = "80%", fig.align = "center", echo = FALSE}
+  seriearima <- bitcoinarma
+  sqresidual <- seriearima$residuals^2
+  ArchTest(sqresidual, lag = 6)
+  aTSA::arch.test(seriearima)
+  nortsTest::arch.test(bitcoin.ts, lag.max = 6)
+```
+
+Do primeiro teste, temos um p-valor superior a 5%, portanto, não rejeitamos que haja efeito ARCH. Do segundo teste, temos que há valores superiores a 5%, então, rejeitamos que haja heterocedasticidade no modelo. Do terceiro teste, temos que o p-valor é inferior a 5%, então não rejeitamos a hipótese de que a série seja heterocedástica.
+
+Assim, tomamos um modelo ARCH para representar a série.
+
+# Estimação do Modelo ARCH/GARCH
+
+De acordo com o que foi selecionado na seção anterior, temos os seguintes modelos estimados a partir das informações coletadas até então. Nota-se que todos os coeficientes escolhidos são significativos para o modelo.
+
+### S&P500
+
+```{R, out.width = "80%", fig.align = "center", echo = FALSE}
+sp500.garch <- garchFit(~garch(1,1), data = stdpoors.ts, trace = T)
+summary(sp500.garch)
+```
+
+### Dow Jones
+
+```{R, out.width = "80%", fig.align = "center", echo = FALSE}
+dowjones.garch <- garchFit(~garch(1,1), data = dowjones.ts, trace = T)
+summary(dowjones.garch)
+```
+
+### Nasdaq
+
+```{R, out.width = "80%", fig.align = "center", echo = FALSE}
+nasdaq.garch <- garchFit(~garch(1,0), data = nasdaq.ts, trace = T)
+summary(nasdaq.garch)
+```
+
+### IBOVESPA
+
+```{R, out.width = "80%", fig.align = "center", echo = FALSE}
+bovespa.garch <- garchFit(~garch(1,0), data = bovespa.ts, trace = T)
+summary(bovespa.garch)
+```
+
+### Brent
+
+```{R, out.width = "80%", fig.align = "center", echo = FALSE}
+brent.garch <- garchFit(~garch(1,0), data = brent.ts, trace = T)
+summary(brent.garch)
+```
+
+### Dólar
+
+```{R, out.width = "80%", fig.align = "center", echo = FALSE}
+dolar.garch <- garchFit(~garch(1,1), data = dolar.ts, trace = T)
+summary(dolar.garch)
+```
+
+### Bitcoin
+
+```{R, out.width = "80%", fig.align = "center", echo = FALSE}
+bitcoin.garch <- garchFit(~garch(1,0), data = bitcoin.ts, trace = T)
+summary(bitcoin.garch)
+```
+
+Por fim, percebe-se que os p-valores dos coeficientes são todos inferiores a 5%, o que configura-os como cabíveis ao modelo.
+
+# Previsões da Série
+
+Finalmente, temos a previsão para o valor seguinte de cada uma das séries, que usa os respectivos modelos ARCH/GARCH encontrados anteriormente, considerando apenas os últimos 14 valores da série.
+
+### S&P500
+```{R, out.width = "80%", fig.align = "center", echo = FALSE}
+  predictts <- stdpoors.ts
+  predictgarch <- garchFit(~garch(1,1), data = window(predictts, length(predictts) - 13, length(predictts)), trace = F)
+  predict(predictgarch, 1)
+```
+
+### Dow Jones
+```{R, out.width = "80%", fig.align = "center", echo = FALSE}
+  predictts <- dowjones.ts
+  predictgarch <- garchFit(~garch(1,1), data = window(predictts, length(predictts) - 13, length(predictts)), trace = F)
+  predict(predictgarch, 1)
+```
+
+### Nasdaq
+```{R, out.width = "80%", fig.align = "center", echo = FALSE}
+  predictts <- nasdaq.ts
+  predictgarch <- garchFit(~garch(1,0), data = window(predictts, length(predictts) - 13, length(predictts)), trace = F)
+  predict(predictgarch, 1)
+```
+
+### IBOVESPA
+```{R, out.width = "80%", fig.align = "center", echo = FALSE}
+  predictts <- bovespa.ts
+  predictgarch <- garchFit(~garch(1,0), data = window(predictts, length(predictts) - 13, length(predictts)), trace = F)
+  predict(predictgarch, 1)
+```
+
+### Brent
+```{R, out.width = "80%", fig.align = "center", echo = FALSE}
+  predictts <- brent.ts
+  predictgarch <- garchFit(~garch(1,0), data = window(predictts, length(predictts) - 13, length(predictts)), trace = F)
+  predict(predictgarch, 1)
+```
+
+### Dólar
+```{R, out.width = "80%", fig.align = "center", echo = FALSE}
+  predictts <- dolar.ts
+  predictgarch <- garchFit(~garch(1,1), data = window(predictts, length(predictts) - 13, length(predictts)), trace = F)
+  predict(predictgarch, 1)
+```
+
+### Bitcoin
+```{R, out.width = "80%", fig.align = "center", echo = FALSE}
+  predictts <- bitcoin.ts
+  predict(garchFit(~garch(1,0), data = window(predictts, length(predictts) - 13, length(predictts)), trace = F), 1)
+```
+
+
+
+
+
+
